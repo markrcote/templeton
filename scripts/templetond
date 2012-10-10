@@ -89,10 +89,15 @@ class TempletonApp(object):
 
     MAX_RETRY_COUNT = 5
 
-    def __init__(self, app_name, user, cfg):
+    def __init__(self, app_name, user, cfg, log_dir, verbose_logging):
         self.app_name = app_name
         self.user = user
         self.cfg = cfg
+        if log_dir:
+            self.log_file = os.path.join(self.log_dir, self.app_name + '.log')
+        else:
+            self.log_file = None
+        self.verbose_logging = verbose_logging
         self.controller = None
         self.retry_count = 0
         self.stopping = False
@@ -238,7 +243,14 @@ class TempletonAppController(templeton.events.EventHandler):
             logging.error(errmsg)
             raise CommandError(errno.ENOENT, errmsg)
 
-        args = (spawn_fcgi_path,
+        fcgi_cmd_line = [self.app.python_path()]
+        if self.app.log_file:
+            fcgi_cmd_line += ['-l', self.app.log_file]
+        if self.app.verbose_logging:
+            fcgi_cmd_line += ['-v']
+        fcgi_cmd_line += execution_path(FCGI_APP)
+
+        args = [spawn_fcgi_path,
                 '-n',
                 '-d',
                 self.app.server_path(),
@@ -248,9 +260,7 @@ class TempletonAppController(templeton.events.EventHandler):
                 str(self.app.port),
                 '-u',
                 self.app.user,
-                '--',
-                self.app.python_path(),
-                execution_path(FCGI_APP))
+                '--'] + fcgi_cmd_line
         logging.debug('Starting "%s": %s' % (self.app.app_name, ' '.join(args)))
         self.p = subprocess.Popen(args, stdin=subprocess.PIPE,
                                   stdout=subprocess.PIPE,
@@ -297,11 +307,14 @@ class TempletonAppController(templeton.events.EventHandler):
 """
 class TempletonMgr(object):
 
-    def __init__(self, cfg_file_name, starting_port, user, nginx_locations_dir):
+    def __init__(self, cfg_file_name, starting_port, user, nginx_locations_dir,
+                 log_dir, verbose_logging):
         self.cfg_file_name = cfg_file_name
         self.starting_port = starting_port
         self.user = user
         self.nginx_locations_dir = nginx_locations_dir
+        self.log_dir = log_dir
+        self.verbose_logging = verbose_logging
         self.cfg = ImmediateWriteConfigParser(self.cfg_file_name)
         self.apps = {}
         app_names = self.cfg.sections()
@@ -311,7 +324,8 @@ class TempletonMgr(object):
     def load_app(self, app_name):
         app = None
         try:
-            app = TempletonApp(app_name, self.user, self.cfg)
+            app = TempletonApp(app_name, self.user, self.cfg, self.log_dir,
+                               self.verbose_logging)
             self.apps[app_name] = app
         except AppMissingData:
             sys.stderr.write('App "%s" has missing data; ignoring it.\n'
@@ -552,8 +566,12 @@ def run(options):
     logging.info('Starting templeton app server.')
     global reactor
     reactor = templeton.events.Reactor()
+    if options.log_file:
+        log_dir = os.path.dirname(options.log_file)
+    else:
+        log_dir = None
     mgr = TempletonMgr(options.data_file, options.starting_port, options.user,
-                       options.nginx_locations_dir)
+                       options.nginx_locations_dir, log_dir, options.verbose)
     mgr.start_all()
     acceptor = CommandAcceptor(mgr)
     reactor.run()

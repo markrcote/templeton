@@ -7,12 +7,33 @@
 import inspect
 import os.path
 import sys
+import templeton.logs
 import web
 
-sys.path.append('.')
+if __name__ == '__main__':
+    sys.path.append('.')
+    from server import app
 
-print 'import'
-from server import app
+    from optparse import OptionParser
+    parser = OptionParser()
+    parser.add_option('-l', '--log-file', dest='log_file',
+                      help='location of log file, defaults to stdout',
+                      default=None)
+    parser.add_option('-v', '--verbose', dest='verbose',
+                      action='store_true', help='enable verbose logging')
+    (options, args) = parser.parse_args()
 
-web.wsgi.runwsgi = lambda func, addr=None: web.wsgi.runfcgi(func, addr)
-app.run()
+    if options.log_file:
+        templeton.logs.setup_file(log_file, options.verbose)
+    else:
+        templeton.logs.setup_stream(options.verbose)
+
+    try:
+        from handlers import init
+    except ImportError:
+        pass
+    else:
+        init()
+
+    web.wsgi.runwsgi = lambda func, addr=None: web.wsgi.runfcgi(func, addr)
+    app.run()

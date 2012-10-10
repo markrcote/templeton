@@ -2,4 +2,8 @@
 urls = (
 )
 
+def init():
+    # Called with the server is started.
+    pass
+
 # Handler classes go here
