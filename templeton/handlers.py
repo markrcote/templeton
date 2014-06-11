@@ -52,7 +52,7 @@ def redirect_api_if_needed():
     """ Redirects all api calls to slash-terminated pages, for
         consistency"""
     if web.ctx.path[-1] != '/':
-        raise web.seeother(web.ctx.env.get('SCRIPT_FILENAME', '') +
+        raise web.seeother(web.ctx.env.get('SCRIPT_NAME', '') +
                            web.ctx.path + '/' + web.ctx.query)
 
 
